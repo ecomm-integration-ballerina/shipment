@@ -24,10 +24,10 @@ service<http:Service> shipmentDataService bind orderListener {
 
     @http:ResourceConfig {
         methods:["GET"],
-        path: "/"
+        path: "/{orderNo}"
     }
-    getShipment (endpoint outboundEp, http:Request req) {
-        http:Response res = getShipment(req);
+    getShipment (endpoint outboundEp, http:Request req, string orderNo) {
+        http:Response res = getShipment(req, orderNo);
         outboundEp->respond(res) but { error e => log:printError("Error while responding", err = e) };
     }      
 }

@@ -92,37 +92,35 @@ public function addShipment (http:Request req, model:Shipment shipment) returns 
     return res;
 }
 
-public function getShipment (http:Request req)
+public function getShipment (http:Request req, string orderNo)
                     returns http:Response {
 
-    // string orderNo = "";
-    // string sqlString = "select * from CUSTOMER_SHIPMENT_DETAILS where ORDER_NUMBER=? limit 1";
+    string sqlString = "select * from CUSTOMER_SHIPMENT_DETAILS where ORDER_NUMBER=? limit 1";
 
-    // var ret = orderDB->select(sqlString, model:Shipment, orderNo);
+    var ret = shipmentDB->select(sqlString, model:Shipment, loadToMemory = true, orderNo);
+
+    json retJson;
+    int code;
+    match ret {
+        table<model:Shipment> tableShipment => {
+            if (tableShipment.count()== 0) {
+                retJson = { "Status": "Not Found"};
+                code = http:NOT_FOUND_404;
+            } else {
+                json shipmentJsonArray = check <json> tableShipment;
+                retJson = shipmentJsonArray[0];
+                code = http:OK_200;
+            }
+        }
+        error err => {
+            retJson = { "Status": "Internal Server Error", "Error": err.message };
+            code = http:INTERNAL_SERVER_ERROR_500;
+        }
+    }
 
     http:Response resp = new;
-    // json[] jsonReturnValue;
-    // match ret {
-    //     table<model:OrderDAO> tableOrderDAO => {
-    //         foreach orderRec in tableOrderDAO {
-    //             io:StringReader sr = new(check mime:base64DecodeString(orderRec.request.toString()));
-    //             json requestJson = check sr.readJson();
-    //             orderRec.request = requestJson;
-    //             jsonReturnValue[lengthof jsonReturnValue] = check <json> orderRec;
-    //         }
-    //         io:println(jsonReturnValue);
-    //         resp.setJsonPayload(untaint jsonReturnValue);
-    //         resp.statusCode = http:OK_200;
-    //     }
-    //     error err => {
-    //         json respPayload = { "Status": "Internal Server Error", "Error": err.message };
-    //         resp.setJsonPayload(untaint respPayload);
-    //         resp.statusCode = http:INTERNAL_SERVER_ERROR_500;
-    //     }
-    // }
-
-    
-
+    resp.setJsonPayload(untaint retJson);
+    resp.statusCode = code;
     return resp;
 }
 
