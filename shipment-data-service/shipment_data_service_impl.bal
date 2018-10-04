@@ -5,6 +5,8 @@ import ballerina/log;
 import ballerina/sql;
 import ballerina/mime;
 
+type shipmentBatchType string|int|float;
+
 endpoint mysql:Client shipmentDB {
     host: config:getAsString("shipment.db.host"),
     port: config:getAsInt("shipment.db.port"),
@@ -86,6 +88,93 @@ public function addShipment (http:Request req, model:Shipment shipment) returns 
                     + shipment.orderNo };
     }
     
+    http:Response res = new;
+    res.setJsonPayload(resJson);
+    res.statusCode = statusCode;
+    return res;
+}
+
+public function addShipments (http:Request req, model:Shipments shipments)
+                    returns http:Response {
+
+    string uniqueString;
+    shipmentBatchType[][] shipmentBatches;
+    foreach i, shipment in shipments.shipments {
+        shipmentBatchType[] rec = [shipment.shipToEmail,shipment.shipToCustomerName,shipment.shipToAddressLine1,
+            shipment.shipToAddressLine2,shipment.shipToAddressLine3,shipment.shipToContactNumber,
+            shipment.shipToAddressLine4,shipment.shipToCity,shipment.shipToState,shipment.shipToCountry,
+            shipment.shipToZip,shipment.shipToCounty,shipment.shipToProvince,shipment.billToAddressLine1,
+            shipment.billToAddressLine2,shipment.billToAddressLine3,shipment.billToAddressLine4,
+            shipment.billToContactNumber,shipment.billToCity,shipment.billToState,shipment.billToCountry,
+            shipment.billToZip,shipment.billToCounty,shipment.billToProvince,shipment.orderNo,
+            shipment.lineNumber,shipment.contextId,
+            shipment.shipToEmail,shipment.shipToCustomerName,shipment.shipToAddressLine1,
+            shipment.shipToAddressLine2,shipment.shipToAddressLine3,shipment.shipToContactNumber,
+            shipment.shipToAddressLine4,shipment.shipToCity,shipment.shipToState,shipment.shipToCountry,
+            shipment.shipToZip,shipment.shipToCounty,shipment.shipToProvince,shipment.billToAddressLine1,
+            shipment.billToAddressLine2,shipment.billToAddressLine3,shipment.billToAddressLine4,
+            shipment.billToContactNumber,shipment.billToCity,shipment.billToState,shipment.billToCountry,
+            shipment.billToZip,shipment.billToCounty,shipment.billToProvince,shipment.orderNo,
+            shipment.lineNumber,shipment.contextId];
+        shipmentBatches[i] = rec;
+        uniqueString = uniqueString + "," + shipment.orderNo;        
+    }
+    
+    string sqlString = "INSERT INTO CUSTOMER_SHIPMENT_DETAILS(SHIP_TO_EMAIL,SHIP_TO_CUSTOMER_NAME,SHIP_TO_ADDRESS_LINE_1,
+        SHIP_TO_ADDRESS_LINE_2,SHIP_TO_ADDRESS_LINE_3,SHIP_TO_CONTACT_NUMBER,SHIP_TO_ADDRESS_LINE_4,
+        SHIP_TO_CITY, SHIP_TO_STATE, SHIP_TO_COUNTRY, SHIP_TO_ZIP, SHIP_TO_COUNTY, SHIP_TO_PROVINCE, 
+        BILL_TO_ADDRESS_LINE_1, BILL_TO_ADDRESS_LINE_2, BILL_TO_ADDRESS_LINE_3, BILL_TO_ADDRESS_LINE_4,
+        BILL_TO_CONTACT_NUMBER, BILL_TO_CITY, BILL_TO_STATE, BILL_TO_COUNTRY, BILL_TO_ZIP, BILL_TO_COUNTY,
+        BILL_TO_PROVINCE, ORDER_NUMBER, LINE_NUMBER, CONTEXT_ID) 
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        ON DUPLICATE KEY UPDATE 
+        SHIP_TO_EMAIL=?,SHIP_TO_CUSTOMER_NAME=?,SHIP_TO_ADDRESS_LINE_1=?,SHIP_TO_ADDRESS_LINE_2=?,
+        SHIP_TO_ADDRESS_LINE_3=?,SHIP_TO_CONTACT_NUMBER=?,SHIP_TO_ADDRESS_LINE_4=?,
+        SHIP_TO_CITY=?, SHIP_TO_STATE=?, SHIP_TO_COUNTRY=?, SHIP_TO_ZIP=?, SHIP_TO_COUNTY=?, SHIP_TO_PROVINCE=?, 
+        BILL_TO_ADDRESS_LINE_1=?, BILL_TO_ADDRESS_LINE_2=?, BILL_TO_ADDRESS_LINE_3=?, BILL_TO_ADDRESS_LINE_4=?,
+        BILL_TO_CONTACT_NUMBER=?, BILL_TO_CITY=?, BILL_TO_STATE=?, BILL_TO_COUNTRY=?, BILL_TO_ZIP=?, BILL_TO_COUNTY=?,
+        BILL_TO_PROVINCE=?, ORDER_NUMBER=?, LINE_NUMBER=?, CONTEXT_ID=?";
+
+    log:printInfo("Calling shipmentDB->batchUpdate for orders : " + uniqueString);
+
+    boolean isSuccessful;
+    transaction with retries = 5, oncommit = onCommitFunction, onabort = onAbortFunction {  
+        var retBatch = shipmentDB->batchUpdate(sqlString, ...shipmentBatches); 
+        io:println(retBatch);
+        match retBatch {
+            int[] counts => {
+                foreach count in counts {
+                    if (count < 1) {
+                        log:printError("Calling shipmentDB->batchUpdate for orders : " + uniqueString 
+                            + " failed", err = ());
+                        isSuccessful = false;
+                        abort;
+                    } else {
+                        log:printInfo("Calling shipmentDB->batchUpdate orders : " + uniqueString + " succeeded");
+                        isSuccessful = true;
+                    }
+                }
+            }
+            error err => {
+                log:printError("Calling shipmentDB->batchUpdate for orders : " + uniqueString 
+                    + " failed", err = err);
+                retry;
+            }
+        }
+    }        
+
+    json resJson;
+    int statusCode;
+    if (isSuccessful) {
+        statusCode = http:OK_200;
+        resJson = { "Status": "Shipments are inserted to the staging database for orders : " 
+            + uniqueString};
+    } else {
+        statusCode = http:INTERNAL_SERVER_ERROR_500;
+        resJson = { "Status": "Failed to insert shipments to the staging database for orders : " 
+            + uniqueString };
+    }
+
     http:Response res = new;
     res.setJsonPayload(resJson);
     res.statusCode = statusCode;

@@ -28,6 +28,10 @@ public type Shipment record {
     string contextId,
 };
 
+public type Shipments record {
+    Shipment[] shipments,
+};
+
 public function shipmentToString(Shipment s) returns string {
     json shipmentJson = check <json> s;
     return shipmentJson.toString();

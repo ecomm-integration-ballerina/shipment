@@ -23,6 +23,16 @@ service<http:Service> shipmentDataService bind orderListener {
     }
 
     @http:ResourceConfig {
+        methods:["POST"],
+        path: "/batch",
+        body: "shipments"
+    }
+    addShipments (endpoint outboundEp, http:Request req, model:Shipments shipments) {
+        http:Response res = addShipments(req, untaint shipments);
+        outboundEp->respond(res) but { error e => log:printError("Error while responding", err = e) };
+    }
+
+    @http:ResourceConfig {
         methods:["GET"],
         path: "/{orderNo}"
     }
