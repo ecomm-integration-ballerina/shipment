@@ -4,8 +4,17 @@ import ballerina/config;
 import ballerina/log;
 import ballerina/sql;
 import ballerina/mime;
+import wso2/redis;
+import ballerina/crypto;
 
 type shipmentBatchType string|int|float;
+
+endpoint redis:Client redisEp {
+    host: "localhost",
+    password: "",
+    options: { connectionPooling: true, isClusterConnection: false, ssl: false,
+        startTls: false, verifyPeer: false, connectionTimeout: 500 }
+};
 
 endpoint mysql:Client shipmentDB {
     host: config:getAsString("shipment.db.host"),
@@ -183,27 +192,38 @@ public function addShipments (http:Request req, model:Shipments shipments)
 
 public function getShipment (http:Request req, string orderNo)
                     returns http:Response {
-
-    string sqlString = "select * from CUSTOMER_SHIPMENT_DETAILS where ORDER_NUMBER=? limit 1";
-
-    var ret = shipmentDB->select(sqlString, model:Shipment, loadToMemory = true, orderNo);
-
+    
+    string cachedRes;
+    boolean found; 
+    (found, cachedRes) = readFromRedis(orderNo);
     json retJson;
     int code;
-    match ret {
-        table<model:Shipment> tableShipment => {
-            if (tableShipment.count()== 0) {
-                retJson = { "Status": "Not Found"};
-                code = http:NOT_FOUND_404;
-            } else {
-                json shipmentJsonArray = check <json> tableShipment;
-                retJson = shipmentJsonArray[0];
-                code = http:OK_200;
+    if (found) {
+        io:StringReader sr = new(cachedRes);
+        retJson = check sr.readJson();
+        io:println(retJson.shipToEmail);
+        code = http:OK_200;
+    } else {
+        string sqlString = "select * from CUSTOMER_SHIPMENT_DETAILS where ORDER_NUMBER=? limit 1";
+        var ret = shipmentDB->select(sqlString, model:Shipment, loadToMemory = true, orderNo);
+
+        match ret {
+            table<model:Shipment> tableShipment => {
+                if (tableShipment.count()== 0) {
+                    retJson = { "Status": "Not Found"};
+                    code = http:NOT_FOUND_404;
+                } else {
+                    json shipmentJsonArray = check <json> tableShipment;
+                    retJson = shipmentJsonArray[0];
+                    code = http:OK_200;
+                    // write in redis
+                    writeInRedis(orderNo, retJson.toString());
+                }
             }
-        }
-        error err => {
-            retJson = { "Status": "Internal Server Error", "Error": err.message };
-            code = http:INTERNAL_SERVER_ERROR_500;
+            error err => {
+                retJson = { "Status": "Internal Server Error", "Error": err.message };
+                code = http:INTERNAL_SERVER_ERROR_500;
+            }
         }
     }
 
@@ -211,6 +231,35 @@ public function getShipment (http:Request req, string orderNo)
     resp.setJsonPayload(untaint retJson);
     resp.statusCode = code;
     return resp;
+}
+
+function writeInRedis(string key, string payload) {
+    log:printInfo("Storing " + key + " in redis");
+    var stringSetresult = redisEp->setVal(key, payload);
+
+    match stringSetresult {
+        string res => log:printInfo("Stored " + key + " in redis. " + res);
+        error err => log:printError("Error occurred while storing " + key + " in redis", err=err);
+    }
+}
+
+function readFromRedis(string key) returns (boolean, string) {
+    log:printInfo("Reading " + key + " from redis");
+    var value = redisEp->get(key);
+
+    boolean found;
+    string resPayload;
+    match value {
+        string res => {
+            log:printInfo("Read " + key + " from redis. " + res);
+            found = true;
+            resPayload = res;
+        }
+        () => log:printInfo("Key " + key + " does not exist in redis. ");
+        error err => log:printError("Error occurred while reading " + key + " from redis", err=err);
+    }
+
+    return (found, resPayload);
 }
 
 function onCommitFunction(string transactionId) {
