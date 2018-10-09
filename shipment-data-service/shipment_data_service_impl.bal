@@ -10,8 +10,8 @@ import ballerina/crypto;
 type shipmentBatchType string|int|float;
 
 endpoint redis:Client redisEp {
-    host: "localhost",
-    password: "",
+    host: config:getAsString("shipment.redis.host"),
+    password: config:getAsString("shipment.redis.password"),
     options: { connectionPooling: true, isClusterConnection: false, ssl: false,
         startTls: false, verifyPeer: false, connectionTimeout: 500 }
 };
