@@ -201,7 +201,6 @@ public function getShipment (http:Request req, string orderNo)
     if (found) {
         io:StringReader sr = new(cachedRes);
         retJson = check sr.readJson();
-        io:println(retJson.shipToEmail);
         code = http:OK_200;
     } else {
         string sqlString = "select * from CUSTOMER_SHIPMENT_DETAILS where ORDER_NUMBER=? limit 1";
