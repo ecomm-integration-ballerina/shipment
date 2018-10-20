@@ -3,14 +3,14 @@ import ballerina/log;
 import ballerina/mysql;
 import raj/shipment.model as model;
 
-endpoint http:Listener orderListener {
+endpoint http:Listener shipmentDataServiceListener {
     port: 8290
 };
 
 @http:ServiceConfig {
     basePath: "/shipment"
 }
-service<http:Service> shipmentDataService bind orderListener {
+service<http:Service> shipmentDataService bind shipmentDataServiceListener {
 
     @http:ResourceConfig {
         methods:["POST"],
