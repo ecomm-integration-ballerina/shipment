@@ -68,7 +68,7 @@ endpoint http:Listener shipmentDataServiceListener {
     ]
 }
 @http:ServiceConfig {
-    basePath: "/shipment"
+    basePath: "/data/shipment"
 }
 service<http:Service> shipmentDataService bind shipmentDataServiceListener {
 
