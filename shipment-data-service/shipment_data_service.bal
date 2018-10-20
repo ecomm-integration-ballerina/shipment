@@ -15,6 +15,9 @@ endpoint http:Listener shipmentDataServiceListener {
 @kubernetes:Deployment {
     name: "shipment-data-service-deployment",
     namespace: "default",
+    labels: {
+        "integration": "shipment"
+    },
     replicas: 1,
     annotations: {
         "prometheus.io/scrape": "true",
