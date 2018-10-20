@@ -106,7 +106,7 @@ public function addShipment (http:Request req, model:Shipment shipment) returns 
 public function addShipments (http:Request req, model:Shipments shipments)
                     returns http:Response {
 
-    string uniqueString;
+    string tids;
     shipmentBatchType[][] shipmentBatches;
     foreach i, shipment in shipments.shipments {
         shipmentBatchType[] rec = [shipment.shipToEmail,shipment.shipToCustomerName,shipment.shipToAddressLine1,
@@ -125,8 +125,12 @@ public function addShipments (http:Request req, model:Shipments shipments)
             shipment.billToContactNumber,shipment.billToCity,shipment.billToState,shipment.billToCountry,
             shipment.billToZip,shipment.billToCounty,shipment.billToProvince,shipment.orderNo,
             shipment.lineNumber,shipment.contextId];
-        shipmentBatches[i] = rec;
-        uniqueString = uniqueString + "," + shipment.orderNo;        
+        shipmentBatches[i] = rec; 
+        if (i == 0) {
+            tids = shipment.orderNo;
+        } else {
+            tids = tids + ", " + shipment.orderNo;
+        }     
     }
     
     string sqlString = "INSERT INTO CUSTOMER_SHIPMENT_DETAILS(SHIP_TO_EMAIL,SHIP_TO_CUSTOMER_NAME,SHIP_TO_ADDRESS_LINE_1,
@@ -144,29 +148,26 @@ public function addShipments (http:Request req, model:Shipments shipments)
         BILL_TO_CONTACT_NUMBER=?, BILL_TO_CITY=?, BILL_TO_STATE=?, BILL_TO_COUNTRY=?, BILL_TO_ZIP=?, BILL_TO_COUNTY=?,
         BILL_TO_PROVINCE=?, ORDER_NUMBER=?, LINE_NUMBER=?, CONTEXT_ID=?";
 
-    log:printInfo("Calling shipmentDB->batchUpdate for orders : " + uniqueString);
+    log:printInfo("Calling shipmentDB->batchUpdate for orders : " + tids);
 
     boolean isSuccessful;
     transaction with retries = 5, oncommit = onCommitFunction, onabort = onAbortFunction {  
         var retBatch = shipmentDB->batchUpdate(sqlString, ...shipmentBatches); 
-        io:println(retBatch);
         match retBatch {
             int[] counts => {
                 foreach count in counts {
                     if (count < 1) {
-                        log:printError("Calling shipmentDB->batchUpdate for orders : " + uniqueString 
-                            + " failed", err = ());
                         isSuccessful = false;
                         abort;
                     } else {
-                        log:printInfo("Calling shipmentDB->batchUpdate orders : " + uniqueString + " succeeded");
                         isSuccessful = true;
                     }
                 }
             }
             error err => {
-                log:printError("Calling shipmentDB->batchUpdate for orders : " + uniqueString 
+                log:printError("Calling shipmentDB->batchUpdate for orders : " + tids 
                     + " failed", err = err);
+                isSuccessful = false;
                 retry;
             }
         }
@@ -175,13 +176,16 @@ public function addShipments (http:Request req, model:Shipments shipments)
     json resJson;
     int statusCode;
     if (isSuccessful) {
+        log:printInfo("Calling shipmentDB->batchUpdate orders : " + tids + " succeeded");
         statusCode = http:OK_200;
         resJson = { "Status": "Shipments are inserted to the staging database for orders : " 
-            + uniqueString};
+            + tids};
     } else {
+        log:printError("Calling shipmentDB->batchUpdate for orders : " + tids 
+                            + " failed", err = ());
         statusCode = http:INTERNAL_SERVER_ERROR_500;
         resJson = { "Status": "Failed to insert shipments to the staging database for orders : " 
-            + uniqueString };
+            + tids };
     }
 
     http:Response res = new;
